@@ -1,0 +1,58 @@
+# OS/editor metadata
+._*
+.DS_Store
+*~
+.Rhistory
+.RData
+.Ruserdata
+.vscode/
+.idea/
+
+# Python/R caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.Rproj.user/
+
+# Credentials and local configuration
+.env
+.env.*
+*.secret
+*.secrets
+*.pem
+*.key
+credentials*
+secrets*
+config.local.*
+
+# Local/private data and generated outputs
+data/
+results/
+logs/
+output/
+_project_state/
+_tmp_author_info/
+*.RData
+*.rds
+*.Rdata
+*.sdf
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.doc
+*.docx
+*.zip
+Rplots.pdf
+ScreenShot_*.png
+
+# Allow only reviewed release tables and staging PDFs
+!release_results/
+!release_results/*.csv
+!figures/
+!figures/*.pdf
+!dashboard/
+!dashboard/*.py
+!dashboard/*.json
+!dashboard/*.md
+

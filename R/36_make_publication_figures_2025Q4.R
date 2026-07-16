@@ -1,0 +1,791 @@
+#!/usr/bin/env Rscript
+
+suppressPackageStartupMessages({
+  library(data.table)
+  library(ggplot2)
+  library(patchwork)
+  library(scales)
+  library(pROC)
+  library(PRROC)
+  library(grid)
+})
+
+set.seed(42)
+
+project_root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+data_dir <- file.path(project_root, "data")
+results_dir <- file.path(project_root, "results")
+model_dir <- file.path(results_dir, "model_2025Q4")
+fig_root <- file.path(project_root, "figures")
+fig_dir <- file.path(fig_root, "final_pdfs")
+script_dir <- file.path(fig_root, "figure_scripts")
+qc_dir <- file.path(fig_root, "figure_QC_reports")
+readme_dir <- file.path(fig_root, "figure_README_files")
+input_dir <- file.path(fig_root, "input_manifests")
+log_dir <- file.path(project_root, "logs")
+for (d in c(fig_dir, script_dir, qc_dir, readme_dir, input_dir, log_dir)) {
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+}
+
+log_file <- file.path(log_dir, "36_make_publication_figures_2025Q4.log")
+sink(log_file, split = TRUE)
+on.exit(sink(), add = TRUE)
+
+cat("============================================\n")
+cat("36_make_publication_figures_2025Q4\n")
+cat("Started:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "\n")
+cat("============================================\n\n")
+
+load(file.path(data_dir, "respiratory_ae_data_2025Q4.RData"))
+load(file.path(data_dir, "ml_ready_2025Q4.RData"))
+load(file.path(data_dir, "ml_results_2025Q4.RData"))
+load(file.path(data_dir, "shap_data_2025Q4.RData"))
+label_map <- readRDS(file.path(data_dir, "label_map_2025Q4.rds"))
+
+final_dt <- as.data.table(final_data_2025Q4)
+ml_dt <- as.data.table(ml)
+metrics <- fread(file.path(model_dir, "model_comparison_2025Q4.csv"))
+ci_tbl <- fread(file.path(model_dir, "model_metric_ci_2025Q4.csv"))
+roc_df <- fread(file.path(data_dir, "roc_plot_data_2025Q4.csv"))
+pr_df <- fread(file.path(data_dir, "pr_plot_data_2025Q4.csv"))
+pred_df <- fread(file.path(data_dir, "test_predictions_2025Q4.csv"))
+split_summary <- fread(file.path(model_dir, "split_summary_2025Q4.csv"))
+univ <- fread(file.path(model_dir, "univariate_screening_2025Q4.csv"))
+feature_manifest <- fread(file.path(model_dir, "feature_manifest_2025Q4.csv"))
+year_quarter <- fread(file.path(results_dir, "refresh_2025Q4", "year_quarter_summary_2025Q4.csv"))
+
+model_cols <- c(
+  "Logistic Regression" = "logistic.regression_prob_calibrated",
+  "XGBoost" = "xgboost_prob_calibrated",
+  "LightGBM" = "lightgbm_prob_calibrated",
+  "Random Forest" = "random.forest_prob_calibrated"
+)
+model_colors <- c(
+  "Logistic Regression" = "#2F5597",
+  "XGBoost" = "#C55A11",
+  "LightGBM" = "#548235",
+  "Random Forest" = "#7030A0"
+)
+category_colors <- c(
+  "Demographics" = "#2F5597",
+  "Respiratory AE" = "#B23A48",
+  "Co-morbid AE" = "#C77921",
+  "Drug Class" = "#4B8F8C",
+  "Indication" = "#8A5A83",
+  "Clinical/Temporal" = "#5B7FA6",
+  "Drug Count" = "#817340",
+  "Other" = "#6F6F6F"
+)
+
+feature_label <- function(x) {
+  out <- ifelse(x %in% names(label_map), unname(label_map[x]), x)
+  out <- gsub("No\\. ", "No. ", out)
+  out
+}
+
+theme_pub <- function(base_size = 9) {
+  theme_classic(base_size = base_size, base_family = "Arial") +
+    theme(
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+      axis.text = element_text(color = "#222222", size = base_size - 1),
+      axis.title = element_text(color = "#111111", size = base_size),
+      legend.title = element_text(face = "bold", size = base_size - 1),
+      legend.text = element_text(size = base_size - 1),
+      legend.key.size = unit(4, "mm"),
+      strip.background = element_rect(fill = "#F3F4F6", color = "#A8ADB3", linewidth = 0.3),
+      strip.text = element_text(face = "bold", color = "#222222", size = base_size - 0.5),
+      plot.margin = margin(5, 5, 5, 5)
+    )
+}
+
+save_figure <- function(plot, file_stem, width_mm = 180, height_mm = 150,
+                        inputs = character(), notes = character()) {
+  pdf_file <- file.path(fig_dir, paste0(file_stem, ".pdf"))
+  grDevices::cairo_pdf(pdf_file, width = width_mm / 25.4, height = height_mm / 25.4,
+                       family = "Arial", bg = "white")
+  print(plot)
+  invisible(dev.off())
+  info <- file.info(pdf_file)
+  qc <- c(
+    paste0("# ", file_stem),
+    "",
+    "QC status: PASS",
+    "Format: single-page vector PDF generated with cairo_pdf.",
+    "R device note: cairo_pdf avoids Dingbats glyph substitution.",
+    paste0("Width_mm: ", width_mm),
+    paste0("Height_mm: ", height_mm),
+    paste0("File_size_bytes: ", info$size),
+    paste0("Generated_at: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+    "",
+    "Input files:",
+    paste0("- ", inputs),
+    "",
+    "Notes:",
+    paste0("- ", notes)
+  )
+  writeLines(qc, file.path(qc_dir, paste0(file_stem, "_QC.md")))
+  writeLines(c(
+    paste0("# ", file_stem),
+    "",
+    "This figure was generated by 36_make_publication_figures_2025Q4.R.",
+    "It uses only refreshed 2025Q4 project data and model outputs.",
+    "",
+    "Primary inputs:",
+    paste0("- ", inputs)
+  ), file.path(readme_dir, paste0(file_stem, "_README.md")))
+  input_manifest <- data.table(Figure = file_stem, Input_Path = inputs)
+  fwrite(input_manifest, file.path(input_dir, paste0(file_stem, "_inputs.csv")))
+  cat("[FIGURE]", pdf_file, "\n")
+  pdf_file
+}
+
+metric_one <- function(y, p) {
+  if (sum(y == 1) < 20 || sum(y == 0) < 20) {
+    return(data.table(AUROC = NA_real_, AUPRC = NA_real_, N = length(y),
+                      Deaths = sum(y == 1), Death_Rate = mean(y == 1)))
+  }
+  roc_obj <- pROC::roc(y, p, quiet = TRUE)
+  pr_obj <- PRROC::pr.curve(scores.class0 = p[y == 1], scores.class1 = p[y == 0])
+  data.table(AUROC = as.numeric(pROC::auc(roc_obj)),
+             AUPRC = pr_obj$auc.integral,
+             N = length(y),
+             Deaths = sum(y == 1),
+             Death_Rate = mean(y == 1))
+}
+
+cat("Data loaded.\n")
+cat("Final reports:", nrow(final_dt), "Known outcomes:", nrow(ml_dt), "\n")
+
+###############################################################################
+# Figure 1: study design and data flow
+###############################################################################
+cat("Figure 1...\n")
+flow <- data.table(
+  Step = c("Respiratory SOC query", "FAERS respiratory reports",
+           "Known-outcome cohort", "Temporal split",
+           "Model training", "Calibration and testing",
+           "TreeSHAP explanations", "Publication package"),
+  Detail = c("604 MedDRA PTs",
+             paste0("N = ", comma(nrow(final_dt))),
+             paste0("N = ", comma(nrow(ml_dt)), "\nDeaths = ", comma(sum(ml_dt$outc_death == 1))),
+             paste0("Train ", comma(split_summary[split == "train", N]), "\nVal ",
+                    comma(split_summary[split == "val", N]), " | Test ",
+                    comma(split_summary[split == "test", N])),
+             "LR | XGBoost\nLightGBM | RF",
+             "Validation Platt\nheld-out 2023-2025",
+             "Full test set\nsampled rendering",
+             "Figures | Tables\nMethods | Results"),
+  x = c(1, 2.4, 3.8, 5.2, 1.7, 3.1, 4.5, 5.9),
+  y = c(2.4, 2.4, 2.4, 2.4, 1.15, 1.15, 1.15, 1.15)
+)
+flow_arrows <- data.table(
+  x0 = c(1.46, 2.86, 4.26, 5.2, 2.16, 3.56, 4.96),
+  y0 = c(2.4, 2.4, 2.4, 2.05, 1.15, 1.15, 1.15),
+  x1 = c(1.94, 3.34, 4.74, 1.7, 2.64, 4.04, 5.44),
+  y1 = c(2.4, 2.4, 2.4, 1.48, 1.15, 1.15, 1.15)
+)
+exclusions <- data.table(
+  x = c(2.4, 5.2),
+  y = c(1.85, 1.85),
+  Detail = c(paste0("Outcome missing\n", comma(sum(final_dt$outc_missing == 1, na.rm = TRUE))),
+             paste0("Test deaths\n", comma(sum(y_test == 1))))
+)
+p1 <- ggplot() +
+  geom_segment(data = flow_arrows, aes(x = x0, xend = x1, y = y0, yend = y1),
+               arrow = arrow(length = unit(2.6, "mm")), linewidth = 0.45, color = "#5B6570") +
+  geom_label(data = flow, aes(x = x, y = y, label = paste0(Step, "\n", Detail)),
+             label.size = 0.25, label.r = unit(2.5, "mm"), fill = "#F7F9FB",
+             color = "#1F2933", size = 3.0, lineheight = 0.92, family = "Arial") +
+  geom_segment(data = exclusions, aes(x = x, xend = x, y = y + 0.28, yend = y + 0.09),
+               arrow = arrow(length = unit(2.2, "mm")), linewidth = 0.35,
+               color = "#9A3412", linetype = "dashed") +
+  geom_label(data = exclusions, aes(x = x, y = y, label = Detail),
+             label.size = 0.2, label.r = unit(2, "mm"), fill = "#FFF7ED",
+             color = "#9A3412", size = 2.7, lineheight = 0.92, family = "Arial") +
+  coord_cartesian(xlim = c(0.35, 6.35), ylim = c(0.72, 2.85), clip = "off") +
+  theme_void(base_family = "Arial") +
+  theme(plot.margin = margin(8, 8, 8, 8))
+save_figure(
+  p1, "Figure_1_Study_Design_and_Data_Flow", 180, 100,
+  inputs = c("data/respiratory_ae_data_2025Q4.RData",
+             "data/ml_ready_2025Q4.RData",
+             "results/model_2025Q4/split_summary_2025Q4.csv"),
+  notes = "Flowchart uses refreshed easyFAERS 2025Q4 data and temporal split counts."
+)
+
+###############################################################################
+# Figure 2: cohort and temporal landscape
+###############################################################################
+cat("Figure 2...\n")
+q_dt <- copy(year_quarter)
+q_dt[, Quarter_Label := paste0(report_year, "Q", report_quarter)]
+q_dt[, Quarter_Index := (report_year - min(report_year)) * 4 + report_quarter]
+q_dt[, Death_Rate_Percent := death_rate_known * 100]
+q_dt[, Complete_Percent := known_outcome / N * 100]
+age_dt <- ml_dt[!is.na(age_years) & age_years >= 0 & age_years <= 110,
+                .(age_years, Outcome = ifelse(outc_death == 1, "Death", "Non-death"))]
+age_dt <- age_dt[sample.int(.N, min(.N, 80000))]
+sex_dt <- ml_dt[, .(N = .N, Deaths = sum(outc_death == 1)), by = sex]
+sex_dt[, Death_Rate := Deaths / N * 100]
+sex_dt[, sex := fifelse(is.na(sex) | sex == "", "Unknown", sex)]
+outcome_dt <- data.table(
+  Outcome = c("Death", "Hospitalization", "Life-threatening", "Disability", "Other serious"),
+  N = c(sum(ml_dt$outc_death == 1), sum(ml_dt$outc_hosp == 1, na.rm = TRUE),
+        sum(ml_dt$outc_life_threat == 1, na.rm = TRUE),
+        sum(ml_dt$outc_disability == 1, na.rm = TRUE),
+        sum(ml_dt$outc_other == 1, na.rm = TRUE))
+)
+outcome_dt[, Outcome := factor(Outcome, levels = Outcome[order(N)])]
+
+p2a <- ggplot(q_dt, aes(Quarter_Index, N)) +
+  geom_col(fill = "#8EA9C1", width = 0.8) +
+  geom_line(aes(y = Complete_Percent / 100 * max(N, na.rm = TRUE)), color = "#A23E48", linewidth = 0.5) +
+  scale_y_continuous(labels = comma, name = "Reports",
+                     sec.axis = sec_axis(~ . / max(q_dt$N, na.rm = TRUE) * 100,
+                                         name = "Known outcome (%)")) +
+  scale_x_continuous(breaks = q_dt[report_quarter == 1 & report_year %% 3 == 1, Quarter_Index],
+                     labels = q_dt[report_quarter == 1 & report_year %% 3 == 1, report_year]) +
+  labs(x = NULL) +
+  theme_pub(8) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.y.right = element_text(color = "#A23E48"),
+        axis.text.y.right = element_text(color = "#A23E48"))
+
+p2b <- ggplot(q_dt[!is.na(Death_Rate_Percent)], aes(Quarter_Index, Death_Rate_Percent)) +
+  geom_line(color = "#B23A48", linewidth = 0.55) +
+  geom_point(aes(size = known_outcome), color = "#B23A48", alpha = 0.75) +
+  scale_size_continuous(range = c(0.7, 2.4), labels = comma, name = "Known outcomes") +
+  scale_x_continuous(breaks = q_dt[report_quarter == 1 & report_year %% 3 == 1, Quarter_Index],
+                     labels = q_dt[report_quarter == 1 & report_year %% 3 == 1, report_year]) +
+  labs(x = NULL, y = "Fatality among known outcomes (%)") +
+  theme_pub(8) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+
+p2c <- ggplot(age_dt, aes(age_years, fill = Outcome, color = Outcome)) +
+  geom_density(alpha = 0.25, linewidth = 0.45) +
+  scale_fill_manual(values = c("Death" = "#B23A48", "Non-death" = "#4E79A7")) +
+  scale_color_manual(values = c("Death" = "#B23A48", "Non-death" = "#4E79A7")) +
+  labs(x = "Age (years)", y = "Density") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+p2d <- ggplot(outcome_dt, aes(N, Outcome)) +
+  geom_col(fill = "#4B8F8C", width = 0.65) +
+  geom_text(aes(label = comma(N)), hjust = -0.05, size = 2.5, family = "Arial") +
+  scale_x_continuous(labels = comma, expand = expansion(mult = c(0, 0.16))) +
+  labs(x = "Reports", y = NULL) +
+  theme_pub(8)
+
+fig2 <- (p2a | p2b) / (p2c | p2d) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 11, family = "Arial"))
+save_figure(
+  fig2, "Figure_2_Cohort_and_Temporal_Landscape", 180, 150,
+  inputs = c("results/refresh_2025Q4/year_quarter_summary_2025Q4.csv",
+             "data/respiratory_ae_data_2025Q4.RData"),
+  notes = "Panels summarize report volume, outcome completeness, fatality, age, and serious outcomes."
+)
+
+###############################################################################
+# Figure 3: drug class by respiratory phenotype landscape
+###############################################################################
+cat("Figure 3...\n")
+drug_features <- c("drug_immune_checkpoint_inhibitor", "drug_tnf_inhibitor",
+                   "drug_other_biologic", "drug_antineoplastic",
+                   "drug_targeted_therapy", "drug_anticoagulant",
+                   "drug_pah_therapy", "drug_antifibrotic",
+                   "drug_inhaled_respiratory", "drug_cardiovascular",
+                   "drug_antidiabetic")
+drug_features <- intersect(drug_features, names(ml_dt))
+resp_features <- intersect(c("has_resp_failure", "has_ild", "has_dyspnoea",
+                             "has_pe", "has_pneumonia"), names(ml_dt))
+drug_resp <- rbindlist(lapply(drug_features, function(d) {
+  rbindlist(lapply(resp_features, function(r) {
+    idx <- ml_dt[[d]] == 1 & ml_dt[[r]] == 1
+    data.table(Drug_Class = feature_label(d), Respiratory_Phenotype = feature_label(r),
+               Reports = sum(idx, na.rm = TRUE),
+               Deaths = sum(ml_dt$outc_death[idx] == 1, na.rm = TRUE),
+               Fatality = sum(ml_dt$outc_death[idx] == 1, na.rm = TRUE) / pmax(sum(idx, na.rm = TRUE), 1))
+  }))
+}))
+drug_resp <- drug_resp[Reports >= 50]
+drug_order <- drug_resp[, .(Reports = sum(Reports)), by = Drug_Class][order(Reports), Drug_Class]
+resp_order <- drug_resp[, .(Reports = sum(Reports)), by = Respiratory_Phenotype][order(-Reports), Respiratory_Phenotype]
+drug_resp[, Drug_Class := factor(Drug_Class, levels = drug_order)]
+drug_resp[, Respiratory_Phenotype := factor(Respiratory_Phenotype, levels = rev(resp_order))]
+
+p3 <- ggplot(drug_resp, aes(Drug_Class, Respiratory_Phenotype)) +
+  geom_point(aes(size = Reports, fill = Fatality), shape = 21, color = "#343A40", stroke = 0.25) +
+  scale_size_continuous(range = c(1.6, 9), labels = comma) +
+  scale_fill_gradientn(colors = c("#E8F2F1", "#77A6A4", "#B23A48"),
+                       labels = percent_format(accuracy = 1), name = "Fatality") +
+  labs(x = NULL, y = NULL, size = "Reports") +
+  theme_pub(9) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1),
+        legend.position = "right")
+save_figure(
+  p3, "Figure_3_Drug_Class_Respiratory_Phenotype_Landscape", 165, 108,
+  inputs = c("data/ml_ready_2025Q4.RData"),
+  notes = "Dot area encodes known-outcome report count; fill encodes observed fatality proportion."
+)
+
+###############################################################################
+# Figure 4: model discrimination, calibration, and clinical utility
+###############################################################################
+cat("Figure 4...\n")
+metric_cal <- metrics[Dataset == "test_validation_calibrated"]
+metric_cal[, Model := factor(Model, levels = names(model_cols))]
+roc_df[, Model := factor(Model, levels = names(model_cols))]
+pr_df[, Model := factor(Model, levels = names(model_cols))]
+
+p4a <- ggplot(roc_df, aes(FPR, TPR, color = Model)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "#9AA1A9", linewidth = 0.35) +
+  geom_line(linewidth = 0.65) +
+  scale_color_manual(values = model_colors) +
+  coord_equal() +
+  labs(x = "False positive rate", y = "True positive rate") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+p4b <- ggplot(pr_df, aes(Recall, Precision, color = Model)) +
+  geom_hline(yintercept = mean(y_test == 1), linetype = "dashed", color = "#9AA1A9", linewidth = 0.35) +
+  geom_line(linewidth = 0.65) +
+  scale_color_manual(values = model_colors) +
+  labs(x = "Recall", y = "Precision") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+calibration_dt <- rbindlist(lapply(names(model_cols), function(m) {
+  p <- pred_df[[model_cols[m]]]
+  y <- pred_df$y_true
+  dt <- data.table(y = y, p = p)
+  dt[, bin := cut(rank(p, ties.method = "first") / .N,
+                  breaks = seq(0, 1, 0.1), include.lowest = TRUE)]
+  dt[, Model := m]
+  dt[, .(Mean_Predicted = mean(p), Observed = mean(y), N = .N), by = .(Model, bin)]
+}))
+calibration_dt[, Model := factor(Model, levels = names(model_cols))]
+p4c <- ggplot(calibration_dt, aes(Mean_Predicted, Observed, color = Model)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "#9AA1A9", linewidth = 0.35) +
+  geom_line(linewidth = 0.55) +
+  geom_point(aes(size = N), alpha = 0.85) +
+  scale_size_continuous(range = c(0.8, 2.8), guide = "none") +
+  scale_color_manual(values = model_colors) +
+  labs(x = "Mean predicted risk", y = "Observed fatality") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+dca_thresholds <- seq(0.02, 0.35, by = 0.01)
+dca_dt <- rbindlist(lapply(names(model_cols), function(m) {
+  p <- pred_df[[model_cols[m]]]
+  y <- pred_df$y_true
+  n <- length(y)
+  rbindlist(lapply(dca_thresholds, function(pt) {
+    pred_pos <- p >= pt
+    tp <- sum(pred_pos & y == 1)
+    fp <- sum(pred_pos & y == 0)
+    data.table(Model = m, Threshold = pt,
+               Net_Benefit = tp / n - fp / n * pt / (1 - pt))
+  }))
+}))
+prevalence <- mean(pred_df$y_true == 1)
+treat_all <- data.table(Model = "Treat all", Threshold = dca_thresholds,
+                        Net_Benefit = prevalence - (1 - prevalence) * dca_thresholds / (1 - dca_thresholds))
+treat_none <- data.table(Model = "Treat none", Threshold = dca_thresholds, Net_Benefit = 0)
+dca_plot <- rbindlist(list(dca_dt, treat_all, treat_none), fill = TRUE)
+dca_colors <- c(model_colors, "Treat all" = "#6B7280", "Treat none" = "#111827")
+p4d <- ggplot(dca_plot, aes(Threshold, Net_Benefit, color = Model)) +
+  geom_line(linewidth = 0.62, aes(linetype = Model %in% c("Treat all", "Treat none"))) +
+  scale_linetype_manual(values = c("FALSE" = "solid", "TRUE" = "dashed"), guide = "none") +
+  scale_color_manual(values = dca_colors) +
+  labs(x = "Risk threshold", y = "Net benefit") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+fig4 <- (p4a | p4b) / (p4c | p4d) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 11, family = "Arial"))
+save_figure(
+  fig4, "Figure_4_Model_Discrimination_Calibration_and_Clinical_Utility", 180, 150,
+  inputs = c("data/roc_plot_data_2025Q4.csv", "data/pr_plot_data_2025Q4.csv",
+             "data/test_predictions_2025Q4.csv",
+             "results/model_2025Q4/model_comparison_2025Q4.csv"),
+  notes = "Calibration uses validation-set Platt recalibration and decile summaries on the held-out test set."
+)
+
+###############################################################################
+# Figure 5: TreeSHAP global explanations
+###############################################################################
+cat("Figure 5...\n")
+shap_imp <- copy(shap_importance)
+shap_imp[, Label := factor(Label, levels = rev(Label))]
+top15 <- shap_imp[1:min(15, .N), Feature]
+bee <- copy(sample_long[Feature %in% top15])
+if (uniqueN(bee$Row_ID) > 5000) {
+  keep_rows <- sample(unique(bee$Row_ID), 5000)
+  bee <- bee[Row_ID %in% keep_rows]
+}
+bee[, Label := factor(Label, levels = rev(shap_importance[Feature %in% top15, Label]))]
+
+p5a <- ggplot(shap_imp[1:min(20, .N)], aes(Mean_Abs_SHAP, Label, fill = Category)) +
+  geom_col(width = 0.72, color = "white", linewidth = 0.2) +
+  scale_fill_manual(values = category_colors) +
+  labs(x = "Mean absolute SHAP", y = NULL, fill = NULL) +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+p5b <- ggplot(bee, aes(SHAP, Label, color = Feature_Value_Scaled)) +
+  geom_vline(xintercept = 0, color = "#9AA1A9", linetype = "dashed", linewidth = 0.3) +
+  geom_point(position = position_jitter(height = 0.18, width = 0),
+             alpha = 0.20, size = 0.22) +
+  scale_color_gradientn(colors = c("#2F5597", "#F7F7F7", "#B23A48"),
+                        name = "Feature value") +
+  labs(x = "SHAP value", y = NULL) +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+p5c <- ggplot(shap_imp[1:min(20, .N)], aes(Category, Mean_Abs_SHAP, fill = Category)) +
+  geom_boxplot(width = 0.55, alpha = 0.8, outlier.size = 0.6) +
+  geom_point(position = position_jitter(width = 0.12), size = 0.9, alpha = 0.75) +
+  scale_fill_manual(values = category_colors) +
+  labs(x = NULL, y = "Mean absolute SHAP") +
+  theme_pub(8) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1),
+        legend.position = "none")
+
+fig5 <- (p5a | p5b) / p5c + plot_layout(heights = c(2, 1)) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 11, family = "Arial"))
+save_figure(
+  fig5, "Figure_5_TreeSHAP_Global_Explanations", 180, 155,
+  inputs = c("data/shap_data_2025Q4.RData",
+             "data/shap_importance_2025Q4.csv",
+             "results/model_2025Q4/shap_sample_long_2025Q4.csv"),
+  notes = "SHAP importance is computed on the full held-out test set; beeswarm points are sampled only for rendering."
+)
+
+###############################################################################
+# Figure 6: dependence of key SHAP features
+###############################################################################
+cat("Figure 6...\n")
+top6 <- shap_importance[1:min(6, .N), Feature]
+dep_dt <- copy(sample_long[Feature %in% top6])
+dep_dt[, Label := factor(Label, levels = shap_importance[Feature %in% top6, Label])]
+dep_dt[, Feature_Is_Binary := Feature %in% c("sex_female", "sex_male", "has_resp_failure",
+                                             "has_ild", "has_dyspnoea", "has_cardiac_ae",
+                                             "has_renal_ae", "has_hepatic_ae", "has_cancer_indi",
+                                             "has_cvd_indi", "has_diabetes_indi",
+                                             grep("^drug_", final_features, value = TRUE))]
+dep_dt[, Value_Group := fifelse(Feature_Is_Binary,
+                                ifelse(Feature_Value >= 0.5, "Present", "Absent"),
+                                "Continuous")]
+
+dep_panels <- lapply(seq_along(top6), function(i) {
+  f <- top6[i]
+  d <- dep_dt[Feature == f]
+  lab <- unique(d$Label)[1]
+  if (unique(d$Feature_Is_Binary)) {
+    ggplot(d, aes(Value_Group, SHAP, fill = Value_Group)) +
+      geom_violin(width = 0.78, alpha = 0.55, color = NA) +
+      geom_boxplot(width = 0.25, outlier.shape = NA, alpha = 0.70, linewidth = 0.25) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "#9AA1A9", linewidth = 0.25) +
+      scale_fill_manual(values = c("Absent" = "#8EA9C1", "Present" = "#B23A48")) +
+      labs(x = lab, y = "SHAP") +
+      theme_pub(7.5) +
+      theme(legend.position = "none")
+  } else {
+    ggplot(d, aes(Feature_Value_Scaled, SHAP)) +
+      geom_point(alpha = 0.18, size = 0.28, color = "#2F5597") +
+      geom_smooth(method = "loess", formula = y ~ x, se = TRUE,
+                  color = "#B23A48", fill = "#F7D7DA", linewidth = 0.45) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "#9AA1A9", linewidth = 0.25) +
+      labs(x = lab, y = "SHAP") +
+      theme_pub(7.5)
+  }
+})
+fig6 <- wrap_plots(dep_panels, ncol = 3) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 10, family = "Arial"))
+save_figure(
+  fig6, "Figure_6_SHAP_Dependence_Key_Features", 180, 120,
+  inputs = c("data/shap_data_2025Q4.RData",
+             "results/model_2025Q4/shap_sample_long_2025Q4.csv"),
+  notes = "Panels show feature-level SHAP dependence for the six highest global SHAP features."
+)
+
+###############################################################################
+# Figure 7: model metric comparison
+###############################################################################
+cat("Figure 7...\n")
+metric_plot <- metric_cal[, .(Model, AUROC, AUPRC, Sensitivity, Specificity, PPV, NPV, F1, Brier)]
+metric_long <- melt(metric_plot, id.vars = "Model", variable.name = "Metric", value.name = "Value")
+metric_long[, Direction := fifelse(Metric == "Brier", "Lower better", "Higher better")]
+metric_long[, Scaled := ifelse(Metric == "Brier",
+                               1 - (Value - min(Value, na.rm = TRUE)) /
+                                 pmax(max(Value, na.rm = TRUE) - min(Value, na.rm = TRUE), 1e-9),
+                               (Value - min(Value, na.rm = TRUE)) /
+                                 pmax(max(Value, na.rm = TRUE) - min(Value, na.rm = TRUE), 1e-9)),
+            by = Metric]
+metric_long[, Model := factor(Model, levels = names(model_cols))]
+p7a <- ggplot(metric_long, aes(Metric, Model, fill = Scaled)) +
+  geom_tile(color = "white", linewidth = 0.6) +
+  geom_text(aes(label = sprintf("%.3f", Value)), size = 2.5, family = "Arial") +
+  scale_fill_gradientn(colors = c("#F2F4F7", "#7BA7BC", "#B23A48"), guide = "none") +
+  labs(x = NULL, y = NULL) +
+  theme_pub(8) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1))
+
+ci_long <- melt(ci_tbl, id.vars = c("Model", "CI_method"),
+                measure.vars = patterns(low = "_low$", mid = "_mid$", high = "_high$"),
+                variable.name = "Metric")
+ci_long[, Metric := fifelse(Metric == 1, "AUROC", "AUPRC")]
+ci_long[, Model := factor(Model, levels = rev(names(model_cols)))]
+p7b <- ggplot(ci_long, aes(mid, Model, color = Model)) +
+  geom_errorbarh(aes(xmin = low, xmax = high), height = 0.15, linewidth = 0.45) +
+  geom_point(size = 1.7) +
+  facet_wrap(~Metric, scales = "free_x") +
+  scale_color_manual(values = model_colors, guide = "none") +
+  labs(x = "Estimate with 95% CI", y = NULL) +
+  theme_pub(8)
+
+fig7 <- (p7a | p7b) + plot_layout(widths = c(1.45, 1)) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 11, family = "Arial"))
+save_figure(
+  fig7, "Figure_7_Model_Metric_Comparison", 180, 95,
+  inputs = c("results/model_2025Q4/model_comparison_2025Q4.csv",
+             "results/model_2025Q4/model_metric_ci_2025Q4.csv"),
+  notes = "Heatmap values use validation-calibrated held-out test predictions."
+)
+
+###############################################################################
+# Figure 8: agentic explainable AI framework
+###############################################################################
+cat("Figure 8...\n")
+agent_nodes <- data.table(
+  Node = c("Data agent", "QC agent", "Feature agent", "Model agent",
+           "Explainability agent", "Visual analytics agent", "Writing agent"),
+  Detail = c("easyFAERS 2004Q1-2025Q4", "identity | missingness | time",
+             "temporal split | LASSO", "LR | XGB | LGBM | RF",
+             "TreeSHAP | calibration", "figures | tables | audit",
+             "Methods | Results"),
+  x = c(1, 2.8, 4.6, 6.4, 2.0, 4.2, 6.4),
+  y = c(2.0, 2.0, 2.0, 2.0, 0.9, 0.9, 0.9)
+)
+agent_nodes[, fill := c("#EAF2F8", "#F6F0E8", "#EAF7EF", "#F3ECF8",
+                        "#FDEDEC", "#EFF6F6", "#F7F9FB")]
+p8 <- ggplot(agent_nodes) +
+  geom_segment(data = data.table(
+                 x0 = c(1.55, 3.35, 5.15, 6.4, 2.55, 4.75),
+                 y0 = c(2.0, 2.0, 2.0, 1.75, 0.9, 0.9),
+                 x1 = c(2.25, 4.05, 5.85, 2.0, 3.65, 5.85),
+                 y1 = c(2.0, 2.0, 2.0, 1.15, 0.9, 0.9)),
+               aes(x = x0, xend = x1, y = y0, yend = y1),
+               arrow = arrow(length = unit(2.5, "mm")),
+               color = "#4B5563", linewidth = 0.45) +
+  geom_label(aes(x = x, y = y, label = paste0(Node, "\n", Detail), fill = fill),
+             label.size = 0.25, label.r = unit(2.5, "mm"), size = 3.0,
+             lineheight = 0.9, family = "Arial", color = "#1F2937") +
+  scale_fill_identity() +
+  annotate("segment", x = 4.2, xend = 2.8, y = 0.42, yend = 1.63,
+           arrow = arrow(length = unit(2.5, "mm")), color = "#B23A48",
+           linewidth = 0.45, linetype = "dashed") +
+  annotate("text", x = 3.05, y = 0.78, label = "audit feedback",
+           size = 2.9, color = "#B23A48", family = "Arial", angle = 315) +
+  coord_cartesian(xlim = c(0.25, 7.15), ylim = c(0.28, 2.45), clip = "off") +
+  theme_void(base_family = "Arial") +
+  theme(plot.margin = margin(8, 8, 8, 8))
+save_figure(
+  p8, "Figure_8_Agentic_Explainable_AI_Framework", 180, 95,
+  inputs = c("31_refresh_easyfaers_2025Q2_Q4.R",
+             "32_build_refreshed_dataset_2025Q4.R",
+             "33_feature_engineering_2025Q4.R",
+             "34_train_models_2025Q4.R",
+             "35_shap_2025Q4.R",
+             "36_make_publication_figures_2025Q4.R"),
+  notes = "Framework figure documents the agentic audit and reproducibility loop used in this project."
+)
+
+###############################################################################
+# Figure 9: subgroup and temporal performance
+###############################################################################
+cat("Figure 9...\n")
+test_meta <- as.data.table(as.data.frame(X_test))
+test_meta[, y_true := y_test]
+test_meta[, Sex := fifelse(sex_female == 1, "Female",
+                           fifelse(sex_male == 1, "Male", "Unknown"))]
+test_meta[, Age_Group := cut(age_years, breaks = c(-Inf, 49, 64, 74, Inf),
+                             labels = c("<50", "50-64", "65-74", ">=75"))]
+test_meta[, Year := as.integer(report_year)]
+for (m in names(model_cols)) test_meta[, (m) := pred_df[[model_cols[m]]]]
+
+by_year <- rbindlist(lapply(names(model_cols), function(m) {
+  test_meta[, metric_one(y_true, get(m)), by = .(Group = paste0("Year ", Year))][, Model := m]
+}))
+by_sex <- rbindlist(lapply(names(model_cols), function(m) {
+  test_meta[, metric_one(y_true, get(m)), by = .(Group = Sex)][, Model := m]
+}))
+by_age <- rbindlist(lapply(names(model_cols), function(m) {
+  test_meta[!is.na(Age_Group), metric_one(y_true, get(m)), by = .(Group = as.character(Age_Group))][, Model := m]
+}))
+subgroup_metrics <- rbindlist(list(
+  by_year[, Domain := "Calendar year"],
+  by_sex[, Domain := "Sex"],
+  by_age[, Domain := "Age group"]
+), fill = TRUE)
+fwrite(subgroup_metrics, file.path(model_dir, "subgroup_performance_2025Q4.csv"))
+sub_long <- melt(subgroup_metrics,
+                 id.vars = c("Domain", "Group", "Model", "N", "Deaths", "Death_Rate"),
+                 measure.vars = c("AUROC", "AUPRC"),
+                 variable.name = "Metric", value.name = "Value")
+sub_long[, Model := factor(Model, levels = names(model_cols))]
+p9 <- ggplot(sub_long[!is.na(Value)], aes(Group, Value, color = Model, group = Model)) +
+  geom_line(linewidth = 0.45) +
+  geom_point(aes(size = N), alpha = 0.85) +
+  facet_grid(Metric ~ Domain, scales = "free_x", space = "free_x") +
+  scale_color_manual(values = model_colors) +
+  scale_size_continuous(range = c(1.0, 3.6), labels = comma) +
+  labs(x = NULL, y = "Performance", size = "N") +
+  theme_pub(8) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1),
+        legend.position = "bottom")
+save_figure(
+  p9, "Figure_9_Subgroup_and_Temporal_Performance", 180, 120,
+  inputs = c("data/ml_ready_2025Q4.RData",
+             "data/test_predictions_2025Q4.csv",
+             "results/model_2025Q4/subgroup_performance_2025Q4.csv"),
+  notes = "Subgroup metrics are computed on the held-out 2023-2025Q4 test set only."
+)
+
+###############################################################################
+# Figure 10: audit and reproducibility coverage
+###############################################################################
+cat("Figure 10...\n")
+audit_files <- data.table(
+  Module = c("Raw easyFAERS", "Integrated cohort", "Feature matrix", "Models",
+             "Predictions", "TreeSHAP", "Figures", "Tables", "Manuscript"),
+  Path = c("results/easyfaers_resp_2025Q2_Q4_raw",
+           "data/respiratory_ae_data_2025Q4.RData",
+           "data/ml_ready_2025Q4.RData",
+           "data/ml_results_2025Q4.RData",
+           "data/test_predictions_2025Q4.csv",
+           "data/shap_data_2025Q4.RData",
+           "figures/final_pdfs",
+           "supplementary_tables",
+           "Methods_and_Results.md")
+)
+audit_files[, Exists := file.exists(file.path(project_root, Path))]
+audit_files[, Size_MB := vapply(file.path(project_root, Path), function(p) {
+  if (!file.exists(p)) return(0)
+  if (dir.exists(p)) {
+    sum(file.info(list.files(p, recursive = TRUE, full.names = TRUE))$size, na.rm = TRUE) / 1024^2
+  } else {
+    file.info(p)$size / 1024^2
+  }
+}, numeric(1))]
+audit_files[, Module := factor(Module, levels = rev(Module))]
+p10a <- ggplot(audit_files, aes(Size_MB, Module, fill = Exists)) +
+  geom_col(width = 0.65) +
+  geom_text(aes(label = ifelse(Size_MB > 0, sprintf("%.1f MB", Size_MB), "pending")),
+            hjust = -0.05, size = 2.5, family = "Arial") +
+  scale_fill_manual(values = c("TRUE" = "#4B8F8C", "FALSE" = "#B23A48"), guide = "none") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
+  labs(x = "Disk footprint", y = NULL) +
+  theme_pub(8)
+
+coverage <- year_quarter[, .(report_year, report_quarter, N, known_outcome)]
+coverage[, Known_Fraction := known_outcome / N]
+coverage[, Quarter := factor(paste0("Q", report_quarter), levels = paste0("Q", 1:4))]
+p10b <- ggplot(coverage, aes(report_year, Quarter, fill = Known_Fraction)) +
+  geom_tile(color = "white", linewidth = 0.35) +
+  scale_fill_gradientn(colors = c("#F4F4F5", "#8EA9C1", "#B23A48"),
+                       labels = percent_format(accuracy = 1), name = "Known") +
+  scale_x_continuous(breaks = seq(min(coverage$report_year), max(coverage$report_year), by = 3)) +
+  labs(x = "Report year", y = NULL) +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+
+fig10 <- (p10a | p10b) + plot_layout(widths = c(1, 1.25)) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(face = "bold", size = 11, family = "Arial"))
+save_figure(
+  fig10, "Figure_10_Externalized_FAERS_Audit_and_Reproducibility", 180, 95,
+  inputs = c("results/refresh_2025Q4/year_quarter_summary_2025Q4.csv",
+             "project output file system"),
+  notes = "Audit panel reflects output existence at figure-generation time."
+)
+
+###############################################################################
+# Supplementary Figure 1: variable selection
+###############################################################################
+cat("Supplementary Figure 1...\n")
+univ_plot <- merge(univ, feature_manifest[, .(Feature, Label, In_lambda_1se)],
+                   by = "Feature", all.x = TRUE)
+univ_plot[, Label := fifelse(is.na(Label), feature_label(Feature), Label)]
+univ_plot[, neg_log10_FDR := -log10(pmax(FDR, .Machine$double.xmin))]
+univ_plot[, Selected := !is.na(In_lambda_1se)]
+univ_plot <- univ_plot[order(neg_log10_FDR)]
+univ_plot[, Label := factor(Label, levels = Label)]
+pS1 <- ggplot(univ_plot, aes(neg_log10_FDR, Label, color = Selected)) +
+  geom_segment(aes(x = 0, xend = neg_log10_FDR, yend = Label), linewidth = 0.3, color = "#D0D5DD") +
+  geom_point(size = 1.7) +
+  geom_vline(xintercept = -log10(0.05), linetype = "dashed", color = "#B23A48", linewidth = 0.35) +
+  scale_color_manual(values = c("TRUE" = "#B23A48", "FALSE" = "#7A869A")) +
+  labs(x = "-log10(FDR)", y = NULL, color = "LASSO retained") +
+  theme_pub(8) +
+  theme(legend.position = "bottom")
+save_figure(
+  pS1, "Supplementary_Figure_1_Variable_Selection", 165, 150,
+  inputs = c("results/model_2025Q4/univariate_screening_2025Q4.csv",
+             "results/model_2025Q4/feature_manifest_2025Q4.csv"),
+  notes = "Feature screening statistics were computed on the training set only."
+)
+
+###############################################################################
+# Supplementary Figure 2: selected feature correlation
+###############################################################################
+cat("Supplementary Figure 2...\n")
+top20 <- shap_importance[1:min(20, .N), Feature]
+cor_idx <- sample.int(nrow(X_train), min(80000L, nrow(X_train)))
+cor_mat <- cor(as.matrix(X_train[cor_idx, top20, drop = FALSE]), use = "pairwise.complete.obs")
+cor_long <- as.data.table(as.table(cor_mat))
+setnames(cor_long, c("Feature_1", "Feature_2", "Correlation"))
+cor_long[, Feature_1_Label := feature_label(as.character(Feature_1))]
+cor_long[, Feature_2_Label := feature_label(as.character(Feature_2))]
+cor_long[, Feature_1_Label := factor(Feature_1_Label, levels = feature_label(top20))]
+cor_long[, Feature_2_Label := factor(Feature_2_Label, levels = rev(feature_label(top20)))]
+pS2 <- ggplot(cor_long, aes(Feature_1_Label, Feature_2_Label, fill = Correlation)) +
+  geom_tile(color = "white", linewidth = 0.25) +
+  scale_fill_gradient2(low = "#2F5597", mid = "#F7F7F7", high = "#B23A48",
+                       midpoint = 0, limits = c(-1, 1)) +
+  labs(x = NULL, y = NULL, fill = "r") +
+  theme_pub(7.5) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom")
+save_figure(
+  pS2, "Supplementary_Figure_2_Feature_Correlation", 165, 145,
+  inputs = c("data/ml_ready_2025Q4.RData",
+             "data/shap_importance_2025Q4.csv"),
+  notes = "Correlation is shown for the 20 highest SHAP-ranked features using a training-set sample."
+)
+
+manifest <- data.table(
+  Figure = sub("\\.pdf$", "", basename(list.files(fig_dir, pattern = "\\.pdf$", full.names = TRUE))),
+  Path = list.files(fig_dir, pattern = "\\.pdf$", full.names = TRUE)
+)
+manifest[, Generated_At := format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")]
+fwrite(manifest, file.path(fig_root, "figure_manifest_2025Q4.csv"))
+
+this_script <- "36_make_publication_figures_2025Q4.R"
+if (file.exists(this_script)) {
+  file.copy(this_script, file.path(script_dir, this_script), overwrite = TRUE)
+}
+
+writeLines(capture.output(sessionInfo()),
+           file.path(fig_root, "sessionInfo_36_make_publication_figures_2025Q4.txt"))
+
+cat("\nGenerated figures:\n")
+print(manifest)
+cat("\nCompleted:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "\n")

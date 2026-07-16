@@ -1,0 +1,7 @@
+Agent_ID,Layer,Evidence_Source,Action,Decision,Status,Rationale
+DataIntegrityAgent,Cohort QA,respiratory_ae_full_2025Q4.csv; ml_dataset_2025Q4.csv,verify expected refreshed cohort and known-outcome modelling cohort sizes,PASS,Completed,"Full respiratory cohort n=1,933,080; modelling cohort n=1,123,787."
+TemporalSplitAgent,Leakage control,ml_dataset_2025Q4.csv,"audit train, validation, and test windows",PASS,Completed,"test: 2023-2025 (n=294,855); train: 2012-2021 (n=740,352); val: 2022-2022 (n=88,580)"
+ModelSelectionAgent,Explainable ML,model_comparison_2025Q4.csv,select metric-specific leaders without forcing a single winner,PASS,Completed,"AUROC: Logistic Regression, AUPRC: LightGBM, Brier: Random Forest, F1: LightGBM"
+XAITraceabilityAgent,Model explanation,shap_importance_2025Q4.csv; feature_manifest_2025Q4.csv,verify top SHAP features against feature-selection manifest,PASS,Completed,10/10 top TreeSHAP features appear in the feature manifest.
+TemporalRobustnessAgent,Robustness,subgroup_performance_2025Q4.csv,flag temporal generalisation below prespecified AUROC floor,PASS,Completed,Minimum best calendar-year AUROC=0.717; floor=0.700.
+FederatedOpenFDAAuditAgent,Federated validation,openFDA drug-event API; local_drug_pt_universe.csv,independently recover respiratory PTs for high-volume suspect drugs,PASS_WITH_SCOPE_LIMITATION,Completed,Recovered 80/80 local drug-PT pairs in current openFDA top-1000 reaction tables; Spearman=0.880.

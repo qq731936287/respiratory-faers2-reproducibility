@@ -1,0 +1,35 @@
+Feature,Label,Selected_by,In_lambda_1se,Univariate_FDR
+sex_female,Sex: female,train_only_lasso_lambda_min,TRUE,0
+sex_male,Sex: male,train_only_lasso_lambda_min,TRUE,0
+has_resp_failure,Respiratory failure/arrest,train_only_lasso_lambda_min,TRUE,0
+has_ild,Interstitial lung disease/pneumonitis,train_only_lasso_lambda_min,TRUE,0
+has_dyspnoea,Dyspnoea,train_only_lasso_lambda_min,TRUE,0
+has_cardiac_ae,Cardiac co-reported AE,train_only_lasso_lambda_min,TRUE,0
+has_renal_ae,Renal co-reported AE,train_only_lasso_lambda_min,TRUE,0
+has_hepatic_ae,Hepatic co-reported AE,train_only_lasso_lambda_min,TRUE,0
+drug_immune_checkpoint_inhibitor,Immune checkpoint inhibitor,train_only_lasso_lambda_min,TRUE,0
+drug_tnf_inhibitor,TNF-alpha inhibitor,train_only_lasso_lambda_min,TRUE,0
+drug_pah_therapy,Pulmonary hypertension therapy,train_only_lasso_lambda_min,TRUE,0
+drug_inhaled_respiratory,Inhaled respiratory therapy,train_only_lasso_lambda_min,TRUE,0
+has_cancer_indi,Cancer indication,train_only_lasso_lambda_min,TRUE,0
+has_cvd_indi,Cardiovascular indication,train_only_lasso_lambda_min,TRUE,0
+has_iv_route,Intravenous administration route,train_only_lasso_lambda_min,TRUE,1.40342931668386e-303
+age_missing,Age data missing,train_only_lasso_lambda_min,TRUE,3.55513370319228e-287
+drug_antifibrotic,Antifibrotic therapy,train_only_lasso_lambda_min,TRUE,2.98802902417604e-209
+drug_targeted_therapy,Targeted anticancer therapy,train_only_lasso_lambda_min,TRUE,1.8685664506353e-183
+has_oral_route,Oral administration route,train_only_lasso_lambda_min,FALSE,1.52318087990796e-178
+age_years,Patient age (years),train_only_lasso_lambda_min,TRUE,3.93450359531581e-173
+tto_days,Time-to-onset (days),train_only_lasso_lambda_min,TRUE,1.3502995577644e-144
+drug_other_biologic,Other biologic/JAK immunomodulator,train_only_lasso_lambda_min,TRUE,2.54666716035569e-133
+drug_cardiovascular,Cardiovascular medication,train_only_lasso_lambda_min,TRUE,5.3160216796785e-79
+tto_available,Time-to-onset available,train_only_lasso_lambda_min,FALSE,6.04372234874797e-52
+report_year,Report year,train_only_lasso_lambda_min,TRUE,1.4563236593656e-51
+n_total_drugs,Total no. drugs,train_only_lasso_lambda_min,FALSE,8.04399967202507e-39
+n_total_aes,Total no. adverse events,train_only_lasso_lambda_min,TRUE,6.08563102911849e-27
+drug_anticoagulant,Anticoagulant,train_only_lasso_lambda_min,TRUE,1.43446343853608e-13
+has_pe,Pulmonary embolism,train_only_lasso_lambda_min,TRUE,1.28861953475273e-09
+has_diabetes_indi,Diabetes indication,train_only_lasso_lambda_min,FALSE,2.31954005251179e-08
+drug_antineoplastic,Antineoplastic/cytotoxic therapy,train_only_lasso_lambda_min,TRUE,2.24981439536625e-05
+n_concomitant_drugs,No. concomitant drugs,train_only_lasso_lambda_min,FALSE,0.00129858012881229
+n_resp_pts,No. respiratory AE terms,train_only_lasso_lambda_min,TRUE,0.00189747081831459
+drug_antidiabetic,Antidiabetic medication,train_only_lasso_lambda_min,TRUE,0.033662468267353
