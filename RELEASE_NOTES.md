@@ -1,6 +1,8 @@
-# Public release notes
+# Public release notes (v0.1.1)
 
 This GitHub repository is a sanitized reproducibility candidate, not a redistribution of the underlying FAERS/AEMS report-level data. The repository intentionally excludes raw/report-level records, identifiers, dates, free text, patient-level predictions, model objects, author forms, and credentials.
+
+This patch release also fixes the optional dashboard and smoke test so they resolve only the aggregate files shipped under `release_results/`; no private working-project paths are required.
 
 Before an archived DOI is minted, the authors should:
 

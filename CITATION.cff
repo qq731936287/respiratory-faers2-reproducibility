@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "Please cite the GitHub repository; an archived DOI will be added after Zenodo deposit."
 title: "Respiratory FAERS2 reproducibility materials"
-version: "0.1.0"
+version: "0.1.1"
 date-released: "2026-07-16"
 authors:
   - family-names: "Yu"

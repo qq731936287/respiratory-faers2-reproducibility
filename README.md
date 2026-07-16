@@ -1,10 +1,10 @@
 # Respiratory FAERS2 — public reproducibility release candidate
 
-Status: sanitized public-release candidate (2026-07-16). The GitHub repository is the citable code host; an archived DOI will be added after Zenodo authorization and deposit. The DOI is not yet assigned.
+Status: sanitized public release (2026-07-16). The GitHub repository is the citable code host; an archived DOI will be added after Zenodo authorization and deposit. The DOI is not yet assigned.
 
 This draft contains reviewed analysis scripts, aggregate result tables, a reviewed PDF figure set, and an optional Streamlit evidence viewer. It intentionally does not redistribute report-level FAERS records, identifiers, dates, free-text fields, drug/indication/reaction/outcome rows, patient-level predictions, raw databases, model objects, author forms, or private configuration.
 
-The included figures and aggregate tables are a reproducibility snapshot from the working analysis and are not a substitute for the journal's final revised figure/table files. Reconcile them with the final manuscript before any public release.
+The included figures and aggregate tables are a reproducibility snapshot from the working analysis and are not a substitute for the journal's final revised figure/table files. Reconcile them with the final manuscript before citing a specific figure/table version.
 
 ## Data access
 
@@ -29,6 +29,10 @@ The released tables are aggregate summaries derived from a local analysis run. T
 3. Set FAERS_INPUT_DIR to the local input directory before running R/31_refresh_easyfaers_2025Q2_Q4.R.
 4. Run the scripts in numerical order from the repository root. The scripts write local data/results outputs that are intentionally ignored by version control.
 5. Recreate figures only after verifying that the derived tables match the aggregate release tables.
+
+The dashboard smoke test can be run without raw data:
+
+    python dashboard/smoke_test.py
 
 The easyFAERS helper package and any private data-preparation resources are not bundled in this draft. The repository must not claim fully standalone reproducibility until a public, licensed installation route for that dependency is documented.
 

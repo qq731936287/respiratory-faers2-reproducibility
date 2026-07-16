@@ -9,9 +9,12 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Respiratory FAERS2", page_icon="", layout="wide", initial_sidebar_state="collapsed")
 
-ROOT = Path(__file__).resolve().parents[3]
-AGENT = ROOT / "output" / "bigdata_si" / "agentic_layer"
-DASH = ROOT / "output" / "bigdata_si" / "dashboard"
+# Resolve paths relative to this public repository.  The private working
+# project used ``output/`` and ``results/`` directories, but only the
+# sanitized aggregate release is distributed here.
+ROOT = Path(__file__).resolve().parents[1]
+AGENT = ROOT / "release_results"
+DASH = ROOT / "dashboard"
 STRUCTURE_CATALOG = json.loads((DASH / "drug_structure_catalog.json").read_text(encoding="utf-8")) if (DASH / "drug_structure_catalog.json").exists() else {}
 
 
