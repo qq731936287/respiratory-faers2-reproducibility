@@ -1,8 +1,9 @@
 cff-version: 1.2.0
-message: "Please cite the GitHub repository; an archived DOI will be added after Zenodo deposit."
-title: "Respiratory FAERS2 reproducibility materials"
+message: "Please cite the archived v0.1.1 release using the DOI below."
+title: "Respiratory FAERS2 reproducibility materials for explainable machine-learning fatal-outcome risk modelling"
 version: "0.1.1"
 date-released: "2026-07-16"
+doi: "10.5281/zenodo.21404580"
 authors:
   - family-names: "Yu"
     given-names: "Fanzhen"
@@ -17,4 +18,5 @@ authors:
   - family-names: "Liao"
     given-names: "Jiashu"
 repository-code: "https://github.com/qq731936287/respiratory-faers2-reproducibility"
+url: "https://doi.org/10.5281/zenodo.21404580"
 license: "NOASSERTION"

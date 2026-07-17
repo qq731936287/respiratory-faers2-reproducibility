@@ -1,8 +1,8 @@
-# Respiratory FAERS2 — public reproducibility release candidate
+# Respiratory FAERS2 — public reproducibility archive
 
-Status: sanitized public release (2026-07-16). The GitHub repository is the citable code host; an archived DOI will be added after Zenodo authorization and deposit. The DOI is not yet assigned.
+Status: sanitized public release (2026-07-16). Release `v0.1.1` is archived in Zenodo at [https://doi.org/10.5281/zenodo.21404580](https://doi.org/10.5281/zenodo.21404580).
 
-This draft contains reviewed analysis scripts, aggregate result tables, a reviewed PDF figure set, and an optional Streamlit evidence viewer. It intentionally does not redistribute report-level FAERS records, identifiers, dates, free-text fields, drug/indication/reaction/outcome rows, patient-level predictions, raw databases, model objects, author forms, or private configuration.
+This release contains reviewed analysis scripts, aggregate result tables, a reviewed PDF figure set, and an optional Streamlit evidence viewer. It intentionally does not redistribute report-level FAERS records, identifiers, dates, free-text fields, drug/indication/reaction/outcome rows, patient-level predictions, raw databases, model objects, author forms, or private configuration.
 
 The included figures and aggregate tables are a reproducibility snapshot from the working analysis and are not a substitute for the journal's final revised figure/table files. Reconcile them with the final manuscript before citing a specific figure/table version.
 
@@ -34,7 +34,7 @@ The dashboard smoke test can be run without raw data:
 
     python dashboard/smoke_test.py
 
-The easyFAERS helper package and any private data-preparation resources are not bundled in this draft. The repository must not claim fully standalone reproducibility until a public, licensed installation route for that dependency is documented.
+The easyFAERS helper package and any private data-preparation resources are not bundled in this release. The repository does not claim fully standalone reproducibility without a public, licensed installation route for that dependency.
 
 ## Dashboard
 
@@ -54,4 +54,4 @@ The dashboard is a convenience viewer for aggregate evidence and public openFDA 
 
 ## License and citation
 
-LICENSE is intentionally a placeholder pending author approval. Cite the GitHub URL until an archived DOI is created; do not invent or infer a DOI from the repository URL.
+LICENSE remains a placeholder pending author approval and does not grant reuse rights. Cite the archived release using [https://doi.org/10.5281/zenodo.21404580](https://doi.org/10.5281/zenodo.21404580).
