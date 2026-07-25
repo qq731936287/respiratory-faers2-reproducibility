@@ -4,12 +4,12 @@ This GitHub repository is a sanitized reproducibility archive, not a redistribut
 
 This patch release also fixes the optional dashboard and smoke test so they resolve only the aggregate files shipped under `release_results/`; no private working-project paths are required.
 
-Release `v0.1.1` is archived in Zenodo at [https://doi.org/10.5281/zenodo.21404580](https://doi.org/10.5281/zenodo.21404580). The archived ZIP has an MD5 checksum of `860eee682641fa323b421eea872bb024`.
+Release `v0.1.1` is archived in Zenodo at [https://doi.org/10.5281/zenodo.21404580](https://doi.org/10.5281/zenodo.21404580).
 
 The following scope limitations and author-side actions remain:
 
 - rotate the database credential found in the private source project;
-- confirm the six-author list, contribution statement, and an approved code license;
+- confirm the five-author list, contribution statement, and an approved code license;
 - document a public installation route for the local easyFAERS dependency or state that the workflow is not standalone;
 - reconcile the final manuscript figures and supplementary tables with the aggregate snapshot here;
 - verify that future manuscript figure and supplementary-table revisions remain aligned with the archived aggregate snapshot.

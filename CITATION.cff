@@ -13,8 +13,6 @@ authors:
     given-names: "Shanshan"
   - family-names: "Yang"
     given-names: "Daifeng"
-  - family-names: "Liao"
-    given-names: "Jiashu"
   - family-names: "Sun"
     given-names: "Si"
 repository-code: "https://github.com/qq731936287/respiratory-faers2-reproducibility"

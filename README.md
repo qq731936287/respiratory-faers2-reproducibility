@@ -50,7 +50,7 @@ The dashboard is a convenience viewer for aggregate evidence and public openFDA 
 - The analysis uses spontaneous reports and is descriptive/prognostic; it does not establish drug causality or incidence.
 - The official FAERS/AEMS source is a time-varying quarterly snapshot. Record the exact download date and input release when reproducing.
 - MedDRA release handling and the local easyFAERS preprocessing must be documented for each run.
-- The repository metadata list the six-author working revision supplied for this release. Journal-required authorship confirmation remains separate from the code deposit.
+- The repository metadata list the five-author working revision supplied for this release.
 
 ## License and citation
 
